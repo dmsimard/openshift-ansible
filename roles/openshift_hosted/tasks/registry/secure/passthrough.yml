@@ -1,9 +1,9 @@
 ---
 # Generate a self-signed certificate when there is no user-supplied certificate
 - when:
-  - 'certfile' not in openshift_hosted_registry_routecertificates
-  - 'keyfile' not in openshift_hosted_registry_routecertificates
-  - 'cafile' not in openshift_hosted_registry_routecertificates
+  - "'certfile' not in openshift_hosted_registry_routecertificates"
+  - "'keyfile' not in openshift_hosted_registry_routecertificates"
+  - "'cafile' not in openshift_hosted_registry_routecertificates"
   block:
   - name: Configure self-signed certificate file paths for secrets and volume
     set_fact:
@@ -32,13 +32,13 @@
       cert: "{{ docker_registry_cert_path }}"
       key: "{{ docker_registry_key_path }}"
       expire_days: "{{ openshift_hosted_registry_cert_expire_days if openshift_version | oo_version_gte_3_5_or_1_5(openshift.common.deployment_type) | bool else omit }}"
-    register: registry_self_cert
+    register: registry_self_cert_passthrough
 
 # Retrieve user supplied certificate files if they are provided
 - when:
-  - 'certfile' in openshift_hosted_registry_routecertificates
-  - 'keyfile' in openshift_hosted_registry_routecertificates
-  - 'cafile' in openshift_hosted_registry_routecertificates
+  - "'certfile' in openshift_hosted_registry_routecertificates"
+  - "'keyfile' in openshift_hosted_registry_routecertificates"
+  - "'cafile' in openshift_hosted_registry_routecertificates"
   block:
     - name: Configure provided certificate file paths for secrets and volume
       set_fact:

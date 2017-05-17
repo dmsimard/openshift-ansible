@@ -3,9 +3,9 @@
   fail:
     msg: "When 'openshift_hosted_registry_routetermination' is 'reencrypt', you must provide certificate files with 'openshift_hosted_registry_routecertificates'"
   when:
-    - 'certfile' not in openshift_hosted_registry_routecertificates
-    - 'keyfile' not in openshift_hosted_registry_routecertificates
-    - 'cafile' not in openshift_hosted_registry_routecertificates
+    - "'certfile' not in openshift_hosted_registry_routecertificates"
+    - "'keyfile' not in openshift_hosted_registry_routecertificates"
+    - "'cafile' not in openshift_hosted_registry_routecertificates"
 
 - name: Configure self-signed certificate file paths for secrets and volume
   set_fact:
@@ -34,7 +34,7 @@
     cert: "{{ docker_registry_cert_path }}"
     key: "{{ docker_registry_key_path }}"
     expire_days: "{{ openshift_hosted_registry_cert_expire_days if openshift_version | oo_version_gte_3_5_or_1_5(openshift.common.deployment_type) | bool else omit }}"
-  register: registry_self_cert
+  register: registry_self_cert_reencrypt
 
 - name: Retrieve provided certificate files
   copy:
