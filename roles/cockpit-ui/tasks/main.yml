@@ -1,10 +1,5 @@
 ---
 - block:
-
-  - name: Set fact docker_registry_console_route_hostname
-    set_fact:
-      docker_registry_console_route_hostname: "{{ 'registry-console-default.' ~ (openshift_master_default_subdomain | default('router.default.svc.cluster.local', true)) }}"
-
   # When openshift_hosted_manage_registry=true the openshift_hosted
   # role will create the appropriate route for the docker-registry.
   # When openshift_hosted_manage_registry=false then this code will
@@ -17,6 +12,38 @@
       state: list
     register: docker_registry_route
 
+  - name: Set fact docker_registry_console_route_hostname
+    set_fact:
+      docker_registry_console_route_hostname: "{{ 'registry-console-default.' ~ (openshift_master_default_subdomain | default('router.default.svc.cluster.local', true)) }}"
+
+  - when:
+    - "'cafile' in openshift_cockpit_registry_console_routecertificate"
+    - "'certfile' in openshift_cockpit_registry_console_routecertificate"
+    - "'keyfile' in openshift_cockpit_registry_console_routecertificate"
+    block:
+    - name: Get the certificate contents for registry-console
+      copy:
+        backup: True
+        dest: "/etc/origin/master/named_certificates/{{ item.value | basename }}"
+        src: "{{ item.value }}"
+      with_dict: "{{ openshift_cockpit_registry_console_routecertificate }}"
+
+    # When certificates are defined we will create the reencrypt
+    # registry-console route
+    - name: Create a reencrypt route for registry-console
+      oc_route:
+        name: registry-console
+        namespace: default
+        service_name: registry-console
+        tls_termination: reencrypt
+        host: "{{ openshift_cockpit_registry_console_routehost | default(docker_registry_console_route_hostname) }}"
+        cert_path: "/etc/origin/master/named_certificates/{{ openshift_cockpit_registry_console_routecertificate['certfile'] | basename }}"
+        key_path: "/etc/origin/master/named_certificates/{{ openshift_cockpit_registry_console_routecertificate['keyfile'] | basename }}"
+        cacert_path: "/etc/origin/master/named_certificates/{{ openshift_cockpit_registry_console_routecertificate['cafile'] | basename }}"
+        dest_cacert_path: /etc/origin/master/ca.crt
+      register: registry_console_cockpit_kube
+
+  # Set up passthrough if we have not set up reencrypt termination
   - name: Create passthrough route for registry-console
     oc_route:
       kubeconfig: "{{ openshift_master_config_dir }}/admin.kubeconfig"
@@ -27,6 +54,7 @@
       tls_termination: passthrough
       host: "{{ openshift_cockpit_registry_console_routehost | default(docker_registry_console_route_hostname) }}"
     register: registry_console_cockpit_kube
+    when: registry_console_cockpit_kube is not defined
 
   # XXX: Required for items still using command
   - name: Create temp directory for kubeconfig
