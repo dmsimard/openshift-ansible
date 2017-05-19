@@ -1,0 +1,57 @@
+---
+- name: Validate route termination configuration
+  fail:
+    msg: "When 'openshift_hosted_registry_routetermination' is 'reencrypt', you must provide certificate files with 'openshift_hosted_registry_routecertificates'"
+  when:
+    - 'certfile' not in openshift_hosted_registry_routecertificates
+    - 'keyfile' not in openshift_hosted_registry_routecertificates
+    - 'cafile' not in openshift_hosted_registry_routecertificates
+
+- name: Configure self-signed certificate file paths for secrets and volume
+  set_fact:
+    docker_registry_cert_path: "{{ openshift_master_config_dir }}/registry.crt"
+    docker_registry_key_path: "{{ openshift_master_config_dir }}/registry.key"
+    docker_registry_cacert_path: "{{ openshift_master_config_dir }}/ca.crt"
+
+- name: Retrieve registry service IP
+  oc_service:
+    namespace: "{{ openshift_hosted_registry_namespace }}"
+    name: docker-registry
+    state: list
+  register: docker_registry_service
+
+- name: Generate self-signed docker-registry certificates
+  oc_adm_ca_server_cert:
+    signer_cert: "{{ openshift_master_config_dir }}/ca.crt"
+    signer_key: "{{ openshift_master_config_dir }}/ca.key"
+    signer_serial: "{{ openshift_master_config_dir }}/ca.serial.txt"
+    hostnames:
+    - "{{ 'docker-registry-default.' ~ (openshift_master_default_subdomain | default('router.default.svc.cluster.local', true)) }}"
+    - "{{ docker_registry_service.results.clusterip }}"
+    - "{{ openshift_hosted_registry_name }}.default.svc"
+    - "{{ openshift_hosted_registry_name }}.default.svc.{{ openshift.common.dns_domain }}"
+    - "{{ openshift_hosted_registry_routehost | default(omit) }}"
+    cert: "{{ docker_registry_cert_path }}"
+    key: "{{ docker_registry_key_path }}"
+    expire_days: "{{ openshift_hosted_registry_cert_expire_days if openshift_version | oo_version_gte_3_5_or_1_5(openshift.common.deployment_type) | bool else omit }}"
+  register: registry_self_cert
+
+- name: Retrieve provided certificate files
+  copy:
+    backup: True
+    dest: "{{ openshift_master_config_dir }}/named_certificates/{{ item.value | basename }}"
+    src: "{{ item.value }}"
+  when: item.key in ['certfile', 'keyfile', 'cafile'] and item.value
+  with_dict: "{{ openshift_hosted_registry_routecertificates }}"
+
+- name: Configure a reencrypt route for docker-registry
+  oc_route:
+    name: docker-registry
+    namespace: "{{ openshift_hosted_registry_namespace }}"
+    service_name: docker-registry
+    tls_termination: "{{ openshift_hosted_registry_routetermination }}"
+    host: "{{ openshift_hosted_registry_routehost | default(omit, true) }}"
+    cert_path: "{{ openshift_master_config_dir }}/named_certificates/{{ openshift_hosted_registry_routecertificates['certfile'] | basename }}"
+    key_path: "{{ openshift_master_config_dir }}/named_certificates/{{ openshift_hosted_registry_routecertificates['keyfile'] | basename }}"
+    cacert_path: "{{ openshift_master_config_dir }}/named_certificates/{{ openshift_hosted_registry_routecertificates['cafile'] | basename }}"
+    dest_cacert_path: "{{ docker_registry_cacert_path }}"
