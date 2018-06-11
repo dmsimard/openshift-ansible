@@ -106,12 +106,16 @@
       type: persistentVolumeClaim
       claim_name: "{{ openshift_hosted_registry_storage_volume_name }}-claim"
   when:
-  - openshift_hosted_registry_storage_kind | default(none) in ['nfs', 'openstack', 'glusterfs']
+  - openshift_hosted_registry_storage_kind | default(none) in ['nfs', 'openstack', 'glusterfs', 'hostpath']
 
 - include_tasks: storage/glusterfs_endpoints.yml
   when:
   - openshift_hosted_registry_storage_glusterfs_ips|length > 0
   - openshift_hosted_registry_storage_kind | default(none) in ['glusterfs']
+
+- include_tasks: storage/hostpath.yml
+  when:
+  - openshift_hosted_registry_storage_kind | default(none) in ['hostpath']
 
 - name: Create OpenShift registry
   oc_adm_registry:
